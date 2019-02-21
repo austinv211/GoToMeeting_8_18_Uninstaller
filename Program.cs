@@ -3,15 +3,18 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Security.Principal;
 using System.Threading;
+
 
 namespace GoToMeeting_8_18_Uninstaller
 {
     class Program
     {
+
         static void Main(string[] args)
         {
-
+            
             //store the uninstall path as a constant
             const String uninstallerPath = "C:\\Program Files (x86)\\GoToMeeting\\";
 
@@ -19,14 +22,19 @@ namespace GoToMeeting_8_18_Uninstaller
             List<String> userList = GetComputerUsers();
 
             //stop the running GoToMeeting Processes
+            Console.WriteLine("\n***** Stopping Go To Meeting Processes *****");
             StopProcesses();
 
             //Sleep for 2 seconds to wait for the processes to release file control
+            Console.WriteLine("\n***** Waiting to Release File Control *****");
             Thread.Sleep(20000);
 
             //Remove the users AppData for GoToMeeting
+            Console.WriteLine("\n***** Loading Users Registry Files and Deleting AppData *****");
             foreach (String user in userList)
             {
+                //load the registry hive
+                loadUserRegistryHive(user);
                 String appDataPath1 = "C:\\Users\\" + user + "\\AppData\\Local\\Temp\\LogMeInLogs\\GoToMeeting";
                 String appDataPath2 = "C:\\Users\\" + user + "\\AppData\\Local\\GoToMeeting";
                 RemoveDirectory(appDataPath1);
@@ -34,6 +42,7 @@ namespace GoToMeeting_8_18_Uninstaller
             }
 
             //Delete the classes root subkeys
+            Console.WriteLine("\n***** Removing Keys Under Classes Root *****");
             DeleteSubKeyTree("ClassesRoot", ".gotomeeting");
             DeleteSubKeyTree("ClassesRoot", "gotomeeting");
             DeleteSubKeyTree("ClassesRoot", ".gotomeeting8034");
@@ -52,11 +61,11 @@ namespace GoToMeeting_8_18_Uninstaller
             DeleteSubKeyTree("ClassesRoot", "\\LogMeInInc.Collab8034");
 
             //Delete the local machine registry values
+            Console.WriteLine("\n***** Deleting HKLM Values ******");
             DeleteLMRegValue("SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run\\", "GoToMeetingInstall8034");
 
-            //TODO Delete User reg values for running and shortcuts
-
             //Delete the subkey trees for the local machine
+            Console.WriteLine("\n***** Deleting HKLM Registry Keys *****");
             DeleteSubKeyTree("LocalMachine", "\\SOFTWARE\\Classes\\LogMeInInc.Collab");
             DeleteSubKeyTree("LocalMachine", "\\SOFTWARE\\Classes\\LogMeInInc.Collab.G2M");
             DeleteSubKeyTree("LocalMachine", "\\SOFTWARE\\Classes\\CLSID\\{43B36225-3A02-4097-87F2-B8D89ED5CE02}");
@@ -70,6 +79,7 @@ namespace GoToMeeting_8_18_Uninstaller
             DeleteSubKeyTree("LocalMachine","\\SOFTWARE\\Microsoft\\Internet Explorer\\ProtocolExecute\\gotomeeting8034");
 
             //Delete User Keys
+            Console.WriteLine("\n***** Deleting User Registry Keys *****");
             DeleteSubKeyTree("Users", "\\Software\\Classes\\CLSID\\{84B5A313-CD5D-4904-8BA2-AFDC81C1B309}");
             DeleteSubKeyTree("Users", "\\Software\\Classes\\G2MAddin.OutlookAddin");
             DeleteSubKeyTree("Users", "\\Software\\Classes\\WOW6432Node\\CLSID\\{84B5A313-CD5D-4904-8BA2-AFDC81C1B309}");
@@ -82,16 +92,18 @@ namespace GoToMeeting_8_18_Uninstaller
             DeleteSubKeyTree("Users", "\\Software\\Microsoft\\Office\\Word\\Addins\\G2MAddin.OutlookAddin");
 
             //Remove the folder for the program files
+            Console.WriteLine("\n***** Removing Install Directory *****");
             RemoveDirectory(uninstallerPath);
 
             //Remove the product from add or remove programs
+            Console.WriteLine("\n***** Removing Keys for Add or Remove Programs Listing *****");
             DeleteSubKeyTree("Users", "\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\GoToMeeting");
             DeleteSubKeyTree("LocalMachine", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{D41C99F3-DF21-4562-9AB8-3538219F39FD}");
             DeleteSubKeyTree("LocalMachine", "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{D41C99F3-DF21-4562-9AB8-3538219F39FD}");
             DeleteSubKeyTree("ClassesRoot", "\\Installer\\Products\\3F99C14D12FD2654A98B538312F993DF\\");
 
             //printe deleted to show success
-            Console.WriteLine("Deleted!");
+            Console.WriteLine("\n***** GoToMeeting 8.18 has been uninstalled *****");
         }
 
         //method to check whether a file exists
@@ -139,7 +151,7 @@ namespace GoToMeeting_8_18_Uninstaller
         //method to get the user folder names on the computer
         static List<string> GetComputerUsers()
         {
-            string path = @"C:\\Users\";
+            string path = @"C:\\Users\\";
             List<String> userFolderList = new List<string>();
 
             foreach (string s in Directory.GetDirectories(path))
@@ -150,6 +162,26 @@ namespace GoToMeeting_8_18_Uninstaller
             }
 
             return userFolderList;
+        }
+        //load hives
+        public static void loadUserRegistryHive(string username)
+        {
+            string wimHivePath = "C:\\Users\\" + username + "\\ntuser.dat";
+
+            try
+            {
+                NTAccount f = new NTAccount(username);
+                SecurityIdentifier s = (SecurityIdentifier)f.Translate(typeof(SecurityIdentifier));
+                string sidString = s.ToString();
+
+                string loadedHiveKey = RegistryInterop.Load(wimHivePath, sidString);
+
+                Console.WriteLine("Key Loaded: {0}", loadedHiveKey);
+            }
+            catch (Exception)
+            {
+                Console.WriteLine("Could not resolve sid for user: {0}", username);
+            }
         }
 
         //method to delete a subkey tree for a sepcified registry root
@@ -244,7 +276,7 @@ namespace GoToMeeting_8_18_Uninstaller
                     proc.Kill();
                 }
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 Console.WriteLine("Could not find or kill process");
             }
@@ -259,7 +291,7 @@ namespace GoToMeeting_8_18_Uninstaller
                     proc.Kill();
                 }
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 Console.WriteLine("Could not find or kill process");
             }
@@ -274,7 +306,7 @@ namespace GoToMeeting_8_18_Uninstaller
                     proc.Kill();
                 }
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 Console.WriteLine("Could not find or kill process");
             }
