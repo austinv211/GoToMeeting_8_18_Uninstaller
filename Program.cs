@@ -16,7 +16,7 @@ namespace GoToMeeting_8_18_Uninstaller
         {
             
             //store the uninstall path as a constant
-            const String uninstallerPath = "C:\\Program Files (x86)\\GoToMeeting\\";
+            const String uninstallerPath = "C:\\Program Files (x86)\\GoToMeeting\\8034";
 
             //create a list to store the usernames on the computer
             List<String> userList = GetComputerUsers();
@@ -39,6 +39,17 @@ namespace GoToMeeting_8_18_Uninstaller
                 String appDataPath2 = "C:\\Users\\" + user + "\\AppData\\Local\\GoToMeeting";
                 RemoveDirectory(appDataPath1);
                 RemoveDirectory(appDataPath2);
+
+                if (FileExists("C:\\Users\\" + user + "\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\GoToMeeting.lnk"))
+                {
+                    File.Delete("C:\\Users\\" + user + "\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\GoToMeeting.lnk");
+                }
+
+                if (FileExists("C:\\Users\\" + user + "\\Desktop\\GoToMeeting.lnk"))
+                {
+                    File.Delete("C:\\Users\\" + user + "\\Desktop\\GoToMeeting.lnk");
+                }
+
             }
 
             //Delete the classes root subkeys
@@ -59,6 +70,8 @@ namespace GoToMeeting_8_18_Uninstaller
             DeleteSubKeyTree("ClassesRoot", "\\LogMeInInc.Collab");
             DeleteSubKeyTree("ClassesRoot", "\\LogMeInInc.Collab.G2M");
             DeleteSubKeyTree("ClassesRoot", "\\LogMeInInc.Collab8034");
+            DeleteSubKeyTree("ClassesRoot", "\\CLSID\\{43B36225-3A02-4097-87F2-B8D89ED5CE02}");
+
 
             //Delete the local machine registry values
             Console.WriteLine("\n***** Deleting HKLM Values ******");
@@ -91,6 +104,12 @@ namespace GoToMeeting_8_18_Uninstaller
             DeleteSubKeyTree("Users", "\\Software\\Microsoft\\Office\\PowerPoint\\Addins\\G2MAddin.OutlookAddin");
             DeleteSubKeyTree("Users", "\\Software\\Microsoft\\Office\\Word\\Addins\\G2MAddin.OutlookAddin");
 
+            //Delete User Values
+            DeleteUserRegValue("\\Software\\Microsoft\\OfficeCompat\\Outlook\\AddinCleanLoad", "C:\\Program Files(x86)\\GoToMeeting\\8034\\G2MOutlookAddin64.dll");
+            DeleteUserRegValue("\\Software\\Microsoft\\OfficeCompat\\Outlook\\AddinUsage", "C:\\Program Files(x86)\\GoToMeeting\\8034\\G2MOutlookAddin64.dll");
+            DeleteUserRegValue("Software\\Microsoft\\Windows\\CurrentVersion\\Run", "GoToMeeting");
+            DeleteUserRegValueWhere("\\Software\\Microsoft\\Windows\\CurrentVersion\\UFH\\SHC", "g2m");
+
             //Remove the folder for the program files
             Console.WriteLine("\n***** Removing Install Directory *****");
             RemoveDirectory(uninstallerPath);
@@ -98,9 +117,13 @@ namespace GoToMeeting_8_18_Uninstaller
             //Remove the product from add or remove programs
             Console.WriteLine("\n***** Removing Keys for Add or Remove Programs Listing *****");
             DeleteSubKeyTree("Users", "\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\GoToMeeting");
+            DeleteSubKeyTree("Users", "\\Software\\Microsoft\\Installer\\Products\\B5EE70385E0B4854684DBC03182991EB");
+            DeleteSubKeyTree("Users", "\\Software\\Classes\\CLSID\\{84B5A313-CD5D-4904-8BA2-AFDC81C1B309}");
+            DeleteSubKeyTree("Users", "\\Software\\Microsoft\\Windows\\CurrentVersion\\Run");
             DeleteSubKeyTree("LocalMachine", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{D41C99F3-DF21-4562-9AB8-3538219F39FD}");
             DeleteSubKeyTree("LocalMachine", "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{D41C99F3-DF21-4562-9AB8-3538219F39FD}");
             DeleteSubKeyTree("ClassesRoot", "\\Installer\\Products\\3F99C14D12FD2654A98B538312F993DF\\");
+
 
             //printe deleted to show success
             Console.WriteLine("\n***** GoToMeeting 8.18 has been uninstalled *****");
@@ -170,13 +193,28 @@ namespace GoToMeeting_8_18_Uninstaller
 
             try
             {
+
                 NTAccount f = new NTAccount(username);
                 SecurityIdentifier s = (SecurityIdentifier)f.Translate(typeof(SecurityIdentifier));
                 string sidString = s.ToString();
 
-                string loadedHiveKey = RegistryInterop.Load(wimHivePath, sidString);
+                string[] loadedHives = Registry.Users.GetSubKeyNames();
+                bool foundUserName = false;
 
-                Console.WriteLine("Key Loaded: {0}", loadedHiveKey);
+                foreach (string hiveName in loadedHives)
+                {
+                    if (hiveName.Equals(sidString))
+                    {
+                        foundUserName = true;
+                    }
+                }
+
+                if (!foundUserName)
+                {
+                    string loadedHiveKey = RegistryInterop.Load(wimHivePath, sidString);
+
+                    Console.WriteLine("Key Loaded: {0}", loadedHiveKey);
+                }
             }
             catch (Exception)
             {
@@ -257,11 +295,93 @@ namespace GoToMeeting_8_18_Uninstaller
             {
                 if (runSubKey.GetValue(valueName) != null)
                 {
-                    Console.WriteLine("\tfound value: {0}", valueName);
-                    runSubKey.DeleteValue(valueName);
+                    try
+                    {
+                        Console.WriteLine("\tfound value: {0}", valueName);
+                        runSubKey.DeleteValue(valueName);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("ERROR Deleting Registry Value: {0}", valueName);
+                    }
                 }
             }
         }
+
+        static void DeleteUserRegValue(String keyName, String valueName)
+        {
+            Console.WriteLine("Attempting to Delete Value: " + keyName + valueName);
+            var item = Registry.Users;
+
+            var sids = item.GetSubKeyNames();
+
+            foreach (var sid in sids)
+            {
+                String subKeyName = sid + keyName;
+
+                Console.WriteLine("Attempting to find key: " + "HKEY_Users\\" + subKeyName);
+
+                var key = Registry.Users.OpenSubKey(subKeyName);
+
+                if (key != null)
+                {
+                    try
+                    {
+                        Console.WriteLine("\t" + subKeyName + " found");
+                        Console.WriteLine("\tDeleting Value: " + valueName);
+                        key.DeleteValue(valueName);
+                        key.Close();
+                        item.Close();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("ERROR Deleting Registry Value: {0}", valueName);
+                    }
+                }
+            }
+        }
+
+        static void DeleteUserRegValueWhere(String keyName, String searchValue)
+        {
+            Console.WriteLine("Attempting to Delete Values that match: " + keyName + searchValue);
+            var item = Registry.Users;
+
+            var sids = item.GetSubKeyNames();
+
+            foreach (var sid in sids)
+            {
+                String subKeyName = sid + keyName;
+
+                Console.WriteLine("Attempting to find key: " + "HKEY_Users\\" + subKeyName);
+
+                var key = Registry.Users.OpenSubKey(subKeyName);
+
+                if (key != null)
+                {
+                    try
+                    {
+                        string[] names = key.GetValueNames();
+
+                        foreach (string name in names)
+                        {
+                            string value = (string) key.GetValue(name);
+                            if (value.ToLower().Contains(searchValue))
+                            {
+                                key.DeleteValue(name);
+                            }
+
+                        }
+                        key.Close();
+                        item.Close();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("ERROR Deleting Registry Value: {0}", searchValue);
+                    }
+                }
+            }
+        }
+
 
         //method to stop running GoToMeeting Processes
         static void StopProcesses()
